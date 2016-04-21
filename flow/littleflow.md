@@ -86,11 +86,22 @@ Similarly, parameters to operations are declared except that they are allowed to
 declare operation [] range(max : int = '10') [ numbers : int+]
 ```
 
-## Operators
+## Operators and Expressions
+
+For any expression in the language there is always conceptually an ordered set of ports available some of which may have names.  By default, this set of ports is empty but it can be populated or manipulated by certain expressions (e.g., an operation invocation or a port binding expression).  The set of ports is contextual to the expression and is only used to construct the pipes between operations in the flow.
+
+### Operation Invocation
 
 ### Chain Operator
 
 ### Append Operator
+
+### Port Binding Expression
+
+### Conditional Expression
+
+### Named Pipes
+
 
 ## Flows
 
@@ -102,7 +113,7 @@ flow version = '1.0';
 <metadata.json> → if (' data["@type"]==="Person" ')
                   then add-property(name='name',value='Alex')
                   else add-property(name='author',value='Alex')
-                  ≫ <enhanced-metadata.json>
+                ≫ <enhanced-metadata.json>
 ```
 
 In the above flow, the inputs and outputs are bound to particular resources.  We can make the flow more general by using named pipes:
@@ -114,7 +125,7 @@ flow version = '1.0'
 in → if (' data["@type"]==="Person" ')
      then add-property(name='name',value='Alex')
      else add-property(name='author',value='Alex')
-     ≫ out
+   ≫ out
 ```
 
 The named port `in` becomes a source and the named port `output` becomes a sink.  The overall flow now requires an input to be specified and produces an output that can be bound by the invocation.
@@ -129,7 +140,7 @@ declare flow [ in ] enhance() [out] {
 in → if (' data["@type"]==="Person" ')
      then add-property(name='name',value='Alex')
      else add-property(name='author',value='Alex')
-     ≫ output
+   ≫ output
 }
 
 <metadata.json> → enhance() ≫ <enhanced-metadata.json>
@@ -148,7 +159,6 @@ import <mylib.flow>;
 
 
 ## Expressions
-
 
 ## Typing
 
