@@ -1,0 +1,4 @@
+requests
+wordcloud
+Image>=1.1.7
+numpy>=1.6.1
