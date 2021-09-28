@@ -91,9 +91,38 @@ Two different flow statements can be combined with a label that prefixed with a 
 
 ```
 transform → :transformed
-:transformed → inference → store(name='outcome.json')
-:transformed → store(name='source.json')
+:transformed → inference → store_outcome
+:transformed → store_source
 ```
+
+A flow statement can be terminated by an optional semicolon to remove
+ambiguity. For example:
+
+```
+A :out → B
+:out → C
+```
+
+is the same as (which is also an error):
+
+```
+A :out → B :out → C
+```
+
+TTo send the output of A to both B and C, you must terminate the first flow statement:
+
+```
+A :out → B;
+:out → C
+```
+
+or terminate the first flow statement with a different label:
+```
+A :out → B → :end
+:out → C
+```
+
+
 
 The workflow graph has meets where two or more outputs may converge on a single task and this may require labeling a particular edge to attached another task outcome.
 
@@ -107,7 +136,7 @@ B → :meet
 To use the output of A as the input to B:
 
 ```
-A :out →  C → D → E
+A :out →  C → D → E ;
 :out → B  
 ```
 
@@ -135,16 +164,16 @@ is equivalent to:
 
 ```
 A → :meet D
-B → :meet
+B → :meet ;
 C → :meet
 ```
 
 or
 
 ```
-A → :meet
-B → :meet
-C → :meet
+A → :meet ;
+B → :meet ;
+C → :meet ;
 :meet → D
 ```
 
@@ -158,8 +187,8 @@ D → A|B|C
 is equivalent to:
 
 ```
-D :join → A
-:join → B
+D :join → A ;
+:join → B ;
 :join → C
 ```
 
@@ -167,8 +196,8 @@ or
 
 ```
 D → :join
-:join → A
-:join → B
+:join → A ;
+:join → B ;
 :join → C
 ```
 
@@ -194,14 +223,14 @@ load → score → <http://example.com/myscores.json>(method='PUT')
 
 An implementation may provide out-of-band configuration options for accessing resources that require specific credentials.
 
-Also, it can be useful to qualify whether a task should occur rather than have the decision within the task itself. Within a statement, the 'when' expression enables conditional subgraphs:
+Also, it can be useful to qualify whether a task should occur rather than have the decision within the task itself.
 
 ```
-A → if .status==0 then B
+A → if `.status==0` then B
     else C
 ```
 
-The expression language is jsonpath [3]. The consequence of a conditional is a task invocation.
+The expression is within back quotes and the preferred language is jsonpath [3]. The consequence of a conditional is a task invocation.
 
 Sometimes tasks output sequences of objects and the following tasks are intended for single inputs. In other cases, the sequence of objects are parameterization of parallelism (e.g., hyperparameters for a model).
 
@@ -234,7 +263,7 @@ A → {
 which is equivalent to:
 
 ```
-A :out → B → C → :in E
+A :out → B → C → :in E ;
 :out → D → :in
 ```
 
@@ -272,7 +301,7 @@ Stitching becomes more complicated with conditionals. Conditionals generate an i
 Consider:
 
 ```
-A → if .status==0 then B
+A → if `.status==0` then B
     else C → D
 ```
 
