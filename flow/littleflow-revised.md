@@ -73,15 +73,13 @@ The goals of this syntax are:
  1. A representation of tasks and their metadata operations
  1. Enabling common expressions over metadata between tasks (e.g., conditionals)
 
-The graph is constructed with a single arrow operator (i.e., '→' U+2192 or '->') to connect two tasks.
-
-A task is identified by name which are alpha-numberic along with the hyphen ('-') and underscore ('_') (e.g. my-task)
-
-A task may have parameters indicated by keyword/value pairs within parenthesis (e.g. range(start=1,end=10)).
-
 A workflow is a sequence of whitespace separated statements. Each statement starts with a label or task name, a sequence of arrow operations, and ends with a label or task name.
 
-A label is a colon prefixed name.
+The graph is constructed with a single arrow operator (i.e., '→' U+2192 or '->') to connect two tasks.
+
+A task is identified by name which are alpha-numeric along with the hyphen ('-') and underscore ('_') (e.g., `my-task`).
+
+A task may have parameters indicated by keyword/value pairs within parenthesis (e.g. `range(start=1,end=10)`).
 
 A flow statement is a sequence of arrow operations:
 
@@ -89,7 +87,7 @@ A flow statement is a sequence of arrow operations:
 transform → inference → store
 ```
 
-Two different flow statements can be combined with a label:
+Two different flow statements can be combined with a label that prefixed with a colon:
 
 ```
 transform → :transformed
@@ -97,33 +95,82 @@ transform → :transformed
 :transformed → store(name='source.json')
 ```
 
-The workflow graph has meets where two or more outputs may converge on a single task. These are represented by different statements:
+The workflow graph has meets where two or more outputs may converge on a single task and this may require labeling a particular edge to attached another task outcome.
+
+For example, to have the output of A and B meet at C:
 
 ```
-A → C
-B → C
-```
-
-More complex graphs may require labeling a particular edge to attached another task outcome:
-
-```
-A :meet → C → D → E
+A → :meet C → D → E
 B → :meet
 ```
 
-The start of a flow statement can be a label:
+To use the output of A as the input to B:
+
+```
+A :out →  C → D → E
+:out → B  
+```
+
+At the start of a flow statement, a label identifies the input:
 
 ```
 :before → A → B → C
 ```
 
-And the end of a flow statement can also be a label:
+And the end of a flow statement, a label identifies the output:
 
 ```
 A → B → C → :after
 ```
 
-Labels only have a syntactic meaning.
+To faciltate meets and joins without labels, the vertical bar ('|') operator allows to list multiple tasks.
+
+For example, a simple "fan in" or "meet" can be represented as:
+
+```
+A|B|C → D
+```
+
+is equivalent to:
+
+```
+A → :meet D
+B → :meet
+C → :meet
+```
+
+or
+
+```
+A → :meet
+B → :meet
+C → :meet
+:meet → D
+```
+
+
+Also, a simple "fan out" or "join" can be represented as:
+
+```
+D → A|B|C
+```
+
+is equivalent to:
+
+```
+D :join → A
+:join → B
+:join → C
+```
+
+or
+
+```
+D → :join
+:join → A
+:join → B
+:join → C
+```
 
 A resource by a URI reference in angle brackets:
 
@@ -131,9 +178,23 @@ A resource by a URI reference in angle brackets:
 <dataset.json> → inference → store
 ```
 
-This has a consequence of loading the resource as the output of a the task.
+A resource is effectively an implicit task that loads the resource produces the content as its output. The URI is relative to the effective base URI of the workflow
 
-Finally, it can be useful to qualify whether a task should occur rather than have the decision within the task itself. Within a statement, the 'when' expression enables conditional subgraphs:
+A resource can also be a following task which commits the input to the resource:
+
+```
+load → score → <http://example.com/myservice/api/v1/store>
+```
+
+A resource may be parameterized to enable options like HTTP method, etc.:
+
+```
+load → score → <http://example.com/myscores.json>(method='PUT')
+```
+
+An implementation may provide out-of-band configuration options for accessing resources that require specific credentials.
+
+Also, it can be useful to qualify whether a task should occur rather than have the decision within the task itself. Within a statement, the 'when' expression enables conditional subgraphs:
 
 ```
 A → if .status==0 then B
@@ -142,24 +203,67 @@ A → if .status==0 then B
 
 The expression language is jsonpath [3]. The consequence of a conditional is a task invocation.
 
-## Stitching the graph
+Sometimes tasks output sequences of objects and the following tasks are intended for single inputs. In other cases, the sequence of objects are parameterization of parallelism (e.g., hyperparameters for a model).
 
-The workflow graph is stitched together from all instances of tasks with the same parameters. For example, these are distinct task invocations:
+By default, the input to a task is the whole sequence. To iterate over a the sequence, invoking the follow task for each item in the sequence, we use the multiple operator '*'.
 
- * `C(name='albert')`
- * `C(name='eve')`
+For example, assume that `sequence.json` contains:
 
-While this workflow refers to the same invocation of task 'C':
+```JSON
+{"x":12,"y":24}
+{"x":3,"y":96}
+{"x":7,"y":12}
+{"x":7,"y":7}
+```
+
+The follow flow will invoke the task A for each object in the sequence:
 
 ```
-A → C(name='bob')
-B → C(name='bob')
+<seqeuence.json> → * A
+```
+
+Similary, a flow may require iteration or spreading outputs to a whole "sub-workflow". To facilitate brevity, a subflow can be contained in brackets:
+
+```
+A → {
+  B → C
+  D  
+} → E
 ```
 
 which is equivalent to:
 
 ```
-A :meet → C(name='bob')
+A :out → B → C → :in E
+:out → D → :in
+```
+
+Iteration is also available for subflows:
+
+```
+A → * {
+  B → C
+  D  
+} → E
+```
+
+There is no equivalent of a subflow with iteration.
+
+## Stitching the graph
+
+Every task in a flow statement is unique. A workflow graph is stitched together from all instances of tasks by label references. A task referenced more than once is a distinct invocation of the same task.
+
+For example, this is workflow with two distinct and separate flows:
+
+```
+A → C
+B → C
+```
+
+While this workflow has a single instance of task C:
+
+```
+A → :meet C
 B → :meet
 ```
 
@@ -169,8 +273,7 @@ Consider:
 
 ```
 A → if .status==0 then B
-    else C → :outcome
-:outcome → D
+    else C → D
 ```
 
 The possible execution traces are:
@@ -178,12 +281,6 @@ The possible execution traces are:
 ```
 A → B → D
 A → C → D
-```
-
-But the graph is really:
-
-```
-A → B|C → D
 ```
 
 ## First and last tasks
@@ -210,6 +307,8 @@ is equivalent to:
 :start → F → B
 ```
 
+A resource is automatically a left-most task.
+
 ## Task definitions
 
 A task is referred to by name and invoked with simple parameter values. As such, it is not necessary to declare a task. An implementation can determine the set of names and parameters used.
@@ -227,10 +326,23 @@ A task may output more than one structured object as its output (e.g., a sequenc
 
 When two tasks are joined (e.g. `A → B`), the input is simply the output of the preceding task.
 
-If there are more than two incoming edges, the following rules are applied:
+If there are more than two incoming edges, the inputs are aggregated via the following rules:
 
  1. All singleton empty objects are equivalent and merged into a single empty object.
  1. If a non-empty object is present, singleton empty objects are omitted.
  2. If multiple inputs are present, the union of all the non-empty objects is the input.
 
 In short, inputs are merged into a single sequence of structured objects with duplicate empty objects merged or omitted when non-empty objects are present.
+
+The left-most tasks (i.e., :start) are sent a singleton empty object. The outputs of all the right-most tasks are aggregated using the rules above. Where the output of the overall workflow is
+
+## Reserved words
+
+A task may not have the following names:
+
+ * if
+ * then
+ * else
+ * elif
+
+A label may have any name with the exception that `:start` and `:end` have special semantics. When used, they must be the left-most or right-most "tasks".
